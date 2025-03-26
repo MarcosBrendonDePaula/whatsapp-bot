@@ -1,4 +1,5 @@
 import { Config } from './types';
+import * as path from 'path';
 
 const config: Config = {
     // Configurações gerais do bot
@@ -6,6 +7,35 @@ const config: Config = {
     prefix: '!',
     ownerNumber: '5567998808948', // Substitua pelo seu número
     botName: 'MarcosTools',
+    
+    // Configurações de logging
+    logging: {
+        // Diretório onde os logs serão armazenados
+        dir: './logs',
+        // Nível de log (error, warn, info, debug, trace)
+        level: 'info',
+        // Configurações de rotação de logs
+        rotation: {
+            // Tamanho máximo do arquivo de log antes de rotacionar
+            maxSize: '10m',
+            // Número máximo de arquivos de log a manter
+            maxFiles: 7,
+            // Formato do nome do arquivo de log
+            datePattern: 'YYYY-MM-DD',
+        },
+        // Se deve mostrar logs no console
+        console: true
+    },
+    
+    // Configurações de plugins
+    plugins: {
+        // Diretório onde os plugins estão localizados
+        dir: path.join(__dirname, 'plugins'),
+        // Plugins habilitados (deixe vazio para carregar todos)
+        enabled: [],
+        // Plugins desabilitados (ignorados durante o carregamento)
+        disabled: []
+    }
 };
 
 export default config;
