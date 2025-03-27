@@ -15,6 +15,7 @@
   "description": "Bot de WhatsApp não oficial usando TypeScript",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
+    "@tobyg74/tiktok-api-dl": "^1.2.8",
     "@whiskeysockets/baileys": "^6.17.16",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.3",
