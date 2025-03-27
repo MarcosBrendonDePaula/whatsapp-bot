@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import config from '../config';
 import logger from '../utils/logger';
+import messageQueue from '../utils/message-queue';
 import MessageHandler from './message-handler';
 
 // Definir a interface do logger localmente com base no que é esperado pelo Baileys
@@ -106,6 +107,9 @@ class Connection {
             
             // Salvar credenciais quando atualizadas
             this.sock.ev.on('creds.update', saveCreds);
+            
+            // Configurar a fila de mensagens com o socket
+            messageQueue.setSocket(this.sock);
             
             // Configurar handlers de eventos
             this.setupConnectionHandler();

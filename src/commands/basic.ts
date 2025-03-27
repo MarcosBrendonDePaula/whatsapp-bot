@@ -67,7 +67,7 @@ const basicCommands: Commands = {
             message += `Use ${config.prefix}plugins para ver detalhes.\n\n`;
         }
         
-        message += `Desenvolvido com ❤️`;
+        message += `Desenvolvido por Marcos`;
         
         await sock.sendMessage(sender, { text: message });
     }
