@@ -2,8 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
+import { aiKnowledgeTools } from './ai-tools';
 import logger from '../../utils/logger';
 import aiConfig from './config';
+import knowledgeManager from './knowledge-base';
 
 /**
  * Interface para mensagem no histórico
@@ -347,13 +349,27 @@ class AIUtils {
             // Obter histórico de conversa
             const history = this.getHistory(chatId);
             
-            // Adicionar mensagem do sistema se não existir
-            if (!history.messages.some(m => m.role === 'system')) {
+            // Adicionar mensagem do sistema se não existir ou atualizar com conhecimento personalizado
+            const systemPrompt = aiConfig.getGlobalConfig().systemPrompt;
+            const knowledgePrompt = knowledgeManager.formatKnowledgeForPrompt(chatId);
+            const fullSystemPrompt = knowledgePrompt 
+                ? `${systemPrompt}\n\n${knowledgePrompt}`
+                : systemPrompt;
+                
+            // Verificar se já existe uma mensagem do sistema
+            const systemMessageIndex = history.messages.findIndex(m => m.role === 'system');
+            if (systemMessageIndex === -1) {
+                // Adicionar nova mensagem do sistema
                 this.addMessage(chatId, {
                     role: 'system',
-                    content: aiConfig.getGlobalConfig().systemPrompt,
+                    content: fullSystemPrompt,
                     timestamp: new Date().toISOString()
                 });
+            } else {
+                // Atualizar mensagem do sistema existente
+                history.messages[systemMessageIndex].content = fullSystemPrompt;
+                history.lastUpdated = new Date().toISOString();
+                this.saveHistory(chatId);
             }
             
             // Adicionar mensagem do usuário ao histórico
@@ -379,26 +395,45 @@ class AIUtils {
             logger.debug(`Histórico de mensagens: ${messages.length} mensagens`);
             
             try {
-                const result = await generateText({
+                // Verificar se o modelo suporta ferramentas (apenas GPT-4 e superiores)
+                const supportsTools = chatConfig.model.startsWith('gpt-4');
+                
+                // Configuração base
+                const config: any = {
                     model: openaiInstance(chatConfig.model),
                     messages,
                     temperature: chatConfig.temperature,
                     maxTokens: chatConfig.maxTokens
-                });
+                };
+                
+                // Adicionar ferramentas apenas para modelos compatíveis
+                if (supportsTools) {
+                    try {
+                        config.tools = aiKnowledgeTools();
+                    } catch (toolError) {
+                        logger.error(`Erro ao configurar ferramentas: ${(toolError as Error).message}`, toolError as Error);
+                        // Continuar sem ferramentas
+                    }
+                }
+                
+                const result = await generateText(config);
                 
                 logger.debug(`Resposta gerada com sucesso: ${result.text.substring(0, 50)}...`);
+                
+                // Verificar se a resposta contém comandos para salvar conhecimento
+                const processedResponse = this.processKnowledgeCommands(chatId, result.text);
                 
                 // Adicionar resposta ao histórico
                 this.addMessage(chatId, {
                     role: 'assistant',
-                    content: result.text,
+                    content: processedResponse.cleanResponse,
                     timestamp: new Date().toISOString()
                 });
                 
                 // Atualizar última utilização
                 aiConfig.updateChatConfig(chatId, { lastUsed: new Date().toISOString() });
                 
-                return result.text;
+                return processedResponse.cleanResponse;
             } catch (apiError) {
                 logger.error(`Erro na API do OpenAI: ${(apiError as Error).message}`, apiError as Error);
                 return `Desculpe, ocorreu um erro ao gerar a resposta: ${(apiError as Error).message}`;
@@ -407,6 +442,56 @@ class AIUtils {
             logger.error(`Erro ao gerar resposta para ${chatId}: ${(error as Error).message}`, error as Error);
             return `Desculpe, ocorreu um erro ao processar sua solicitação: ${(error as Error).message}`;
         }
+    }
+    
+    /**
+     * Processa comandos de conhecimento na resposta da IA
+     * @param chatId ID do chat
+     * @param response Resposta da IA
+     * @returns Resposta limpa e informações sobre comandos processados
+     */
+    private processKnowledgeCommands(chatId: string, response: string): { cleanResponse: string, commandsProcessed: boolean } {
+        // Padrão para detectar comandos de conhecimento
+        // Formato: [SAVE_KNOWLEDGE: título | conteúdo | tag1, tag2, ...]
+        const knowledgeCommandRegex = /\[SAVE_KNOWLEDGE:\s*([^|]+)\s*\|\s*([^|]+)(?:\s*\|\s*([^[\]]+))?\]/g;
+        
+        let cleanResponse = response;
+        let commandsProcessed = false;
+        let match;
+        
+        // Encontrar todos os comandos de conhecimento
+        while ((match = knowledgeCommandRegex.exec(response)) !== null) {
+            commandsProcessed = true;
+            
+            const fullMatch = match[0];
+            const title = match[1].trim();
+            const content = match[2].trim();
+            const tagsString = match[3] ? match[3].trim() : '';
+            
+            // Processar tags
+            const tags = tagsString
+                .split(',')
+                .map(tag => tag.trim())
+                .filter(tag => tag.length > 0);
+            
+            // Salvar conhecimento
+            try {
+                const id = knowledgeManager.addKnowledgeItem(chatId, title, content, tags);
+                logger.info(`IA salvou conhecimento automaticamente: ${title} (ID: ${id})`);
+            } catch (error) {
+                logger.error(`Erro ao salvar conhecimento automaticamente: ${(error as Error).message}`, error as Error);
+            }
+            
+            // Remover o comando da resposta
+            cleanResponse = cleanResponse.replace(fullMatch, '');
+        }
+        
+        // Limpar espaços extras e linhas em branco resultantes da remoção dos comandos
+        cleanResponse = cleanResponse
+            .replace(/\n{3,}/g, '\n\n')  // Substituir 3+ quebras de linha por 2
+            .trim();
+        
+        return { cleanResponse, commandsProcessed };
     }
     
     /**

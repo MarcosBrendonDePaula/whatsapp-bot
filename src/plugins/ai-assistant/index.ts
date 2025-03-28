@@ -4,6 +4,7 @@ import { CommandParams } from '../../types';
 import logger from '../../utils/logger';
 import aiConfig, { ChatAIConfig } from './config';
 import aiUtils from './ai-utils';
+import knowledgeManager, { KnowledgeItem } from './knowledge-base';
 
 /**
  * Plugin para assistente de IA usando OpenAI
@@ -106,6 +107,32 @@ export default class AIAssistantPlugin extends BasePlugin {
                 await this.testAI(sock, sender, args.slice(1).join(' '));
                 break;
                 
+            // Comandos de base de conhecimento
+            case 'kb:add':
+            case 'conhecimento:adicionar':
+                await this.addKnowledge(sock, sender, args.slice(1));
+                break;
+                
+            case 'kb:list':
+            case 'conhecimento:listar':
+                await this.listKnowledge(sock, sender, args.slice(1).join(' '));
+                break;
+                
+            case 'kb:view':
+            case 'conhecimento:ver':
+                await this.viewKnowledge(sock, sender, args.slice(1).join(' '));
+                break;
+                
+            case 'kb:remove':
+            case 'conhecimento:remover':
+                await this.removeKnowledge(sock, sender, args.slice(1).join(' '));
+                break;
+                
+            case 'kb:clear':
+            case 'conhecimento:limpar':
+                await this.clearKnowledge(sock, sender);
+                break;
+                
             default:
                 await this.showHelp(sock, sender);
                 break;
@@ -118,6 +145,7 @@ export default class AIAssistantPlugin extends BasePlugin {
     private async showHelp(sock: WASocket, sender: string): Promise<void> {
         const message = `🤖 *Assistente de IA - Comandos*
 
+*Comandos Básicos:*
 *!ai on* - Ativa o assistente de IA
 *!ai off* - Desativa o assistente de IA
 *!ai status* - Mostra o status atual
@@ -130,6 +158,13 @@ export default class AIAssistantPlugin extends BasePlugin {
 *!ai models* - Lista os modelos disponíveis
 *!ai prompt [texto]* - Define o prompt do sistema (apenas em privado)
 *!ai test [mensagem]* - Testa o assistente com uma mensagem específica
+
+*Comandos de Base de Conhecimento:*
+*!ai kb:add [título] [conteúdo] [#tags]* - Adiciona um item de conhecimento
+*!ai kb:list [termo] [#tags]* - Lista itens de conhecimento
+*!ai kb:view [id]* - Exibe detalhes de um item
+*!ai kb:remove [id]* - Remove um item
+*!ai kb:clear* - Limpa toda a base de conhecimento
 
 O assistente de IA responderá automaticamente quando mencionado pelo nome (ou com @nome) ou quando detectar que está sendo chamado.`;
         
@@ -676,6 +711,217 @@ Use !ai model [nome_do_modelo] para alterar o modelo.`;
             logger.error(`Erro ao processar mensagem para IA: ${(error as Error).message}`, error as Error);
             return false;
         }
+    }
+    
+    /**
+     * Adiciona um item de conhecimento
+     * @param sock Socket do WhatsApp
+     * @param sender ID do remetente
+     * @param args Argumentos do comando
+     */
+    private async addKnowledge(sock: WASocket, sender: string, args: string[]): Promise<void> {
+        // Verificar se há argumentos suficientes
+        if (args.length < 2) {
+            await sock.sendMessage(sender, {
+                text: '⚠️ Por favor, forneça um título e conteúdo para o conhecimento.\n\nExemplo: !ai kb:add "Horário de funcionamento" "Segunda a sexta, das 9h às 18h" #horario #funcionamento'
+            });
+            return;
+        }
+        
+        // Extrair título, conteúdo e tags
+        let title = '';
+        let content = '';
+        const tags: string[] = [];
+        
+        // Processar argumentos
+        let currentArg = '';
+        let inQuotes = false;
+        let collectingTitle = true;
+        
+        for (const arg of args) {
+            // Verificar se é uma tag
+            if (arg.startsWith('#') && !inQuotes) {
+                tags.push(arg.substring(1));
+                continue;
+            }
+            
+            // Verificar se começa com aspas
+            if (arg.startsWith('"') && !inQuotes) {
+                inQuotes = true;
+                currentArg = arg.substring(1);
+                continue;
+            }
+            
+            // Verificar se termina com aspas
+            if (arg.endsWith('"') && inQuotes) {
+                inQuotes = false;
+                currentArg += ' ' + arg.substring(0, arg.length - 1);
+                
+                // Adicionar ao título ou conteúdo
+                if (collectingTitle) {
+                    title = currentArg;
+                    collectingTitle = false;
+                } else {
+                    content = currentArg;
+                }
+                
+                currentArg = '';
+                continue;
+            }
+            
+            // Adicionar ao argumento atual
+            if (inQuotes) {
+                currentArg += ' ' + arg;
+            } else {
+                // Se não estiver em aspas, considerar como parte do título ou conteúdo
+                if (collectingTitle) {
+                    title = arg;
+                    collectingTitle = false;
+                } else if (content === '') {
+                    content = arg;
+                }
+            }
+        }
+        
+        // Verificar se título e conteúdo foram fornecidos
+        if (!title || !content) {
+            await sock.sendMessage(sender, {
+                text: '⚠️ Por favor, forneça um título e conteúdo para o conhecimento.\n\nExemplo: !ai kb:add "Horário de funcionamento" "Segunda a sexta, das 9h às 18h" #horario #funcionamento'
+            });
+            return;
+        }
+        
+        // Adicionar conhecimento
+        const id = knowledgeManager.addKnowledgeItem(sender, title, content, tags);
+        
+        await sock.sendMessage(sender, {
+            text: `✅ Conhecimento adicionado com sucesso!\n\n*ID:* ${id}\n*Título:* ${title}\n*Tags:* ${tags.length > 0 ? tags.join(', ') : 'Nenhuma'}`
+        });
+    }
+    
+    /**
+     * Lista itens de conhecimento
+     * @param sock Socket do WhatsApp
+     * @param sender ID do remetente
+     * @param query Termo de busca
+     */
+    private async listKnowledge(sock: WASocket, sender: string, query: string): Promise<void> {
+        // Extrair tags da query
+        const tags: string[] = [];
+        const queryParts = query.split(' ');
+        let searchTerm = '';
+        
+        for (const part of queryParts) {
+            if (part.startsWith('#')) {
+                tags.push(part.substring(1));
+            } else {
+                searchTerm += ' ' + part;
+            }
+        }
+        
+        searchTerm = searchTerm.trim();
+        
+        // Buscar itens
+        const items = knowledgeManager.searchKnowledge(sender, searchTerm, tags);
+        
+        if (items.length === 0) {
+            await sock.sendMessage(sender, {
+                text: '📚 Nenhum item de conhecimento encontrado.'
+            });
+            return;
+        }
+        
+        // Formatar mensagem
+        let message = `📚 *Base de Conhecimento*\n\n`;
+        message += `Encontrados ${items.length} itens:\n\n`;
+        
+        for (const item of items) {
+            message += `*ID:* ${item.id}\n`;
+            message += `*Título:* ${item.title}\n`;
+            message += `*Tags:* ${item.tags.length > 0 ? item.tags.join(', ') : 'Nenhuma'}\n\n`;
+        }
+        
+        message += `Para ver detalhes de um item, use !ai kb:view [id]`;
+        
+        await sock.sendMessage(sender, { text: message });
+    }
+    
+    /**
+     * Exibe detalhes de um item de conhecimento
+     * @param sock Socket do WhatsApp
+     * @param sender ID do remetente
+     * @param id ID do item
+     */
+    private async viewKnowledge(sock: WASocket, sender: string, id: string): Promise<void> {
+        if (!id) {
+            await sock.sendMessage(sender, {
+                text: '⚠️ Por favor, forneça o ID do item que deseja visualizar.\n\nExemplo: !ai kb:view kb_123456789'
+            });
+            return;
+        }
+        
+        // Buscar item
+        const item = knowledgeManager.getKnowledgeItem(sender, id);
+        
+        if (!item) {
+            await sock.sendMessage(sender, {
+                text: `⚠️ Item não encontrado com o ID: ${id}`
+            });
+            return;
+        }
+        
+        // Formatar mensagem
+        let message = `📚 *Item de Conhecimento*\n\n`;
+        message += `*ID:* ${item.id}\n`;
+        message += `*Título:* ${item.title}\n`;
+        message += `*Conteúdo:* ${item.content}\n`;
+        message += `*Tags:* ${item.tags.length > 0 ? item.tags.join(', ') : 'Nenhuma'}\n`;
+        message += `*Criado em:* ${new Date(item.createdAt).toLocaleString()}\n`;
+        message += `*Atualizado em:* ${new Date(item.updatedAt).toLocaleString()}`;
+        
+        await sock.sendMessage(sender, { text: message });
+    }
+    
+    /**
+     * Remove um item de conhecimento
+     * @param sock Socket do WhatsApp
+     * @param sender ID do remetente
+     * @param id ID do item
+     */
+    private async removeKnowledge(sock: WASocket, sender: string, id: string): Promise<void> {
+        if (!id) {
+            await sock.sendMessage(sender, {
+                text: '⚠️ Por favor, forneça o ID do item que deseja remover.\n\nExemplo: !ai kb:remove kb_123456789'
+            });
+            return;
+        }
+        
+        // Remover item
+        const removed = knowledgeManager.removeKnowledgeItem(sender, id);
+        
+        if (!removed) {
+            await sock.sendMessage(sender, {
+                text: `⚠️ Item não encontrado com o ID: ${id}`
+            });
+            return;
+        }
+        
+        await sock.sendMessage(sender, {
+            text: `✅ Item removido com sucesso!`
+        });
+    }
+    
+    /**
+     * Limpa toda a base de conhecimento
+     * @param sock Socket do WhatsApp
+     * @param sender ID do remetente
+     */
+    private async clearKnowledge(sock: WASocket, sender: string): Promise<void> {
+        knowledgeManager.clearKnowledge(sender);
+        
+        await sock.sendMessage(sender, {
+            text: '🧹 Base de conhecimento limpa com sucesso!'
+        });
     }
     
     /**
