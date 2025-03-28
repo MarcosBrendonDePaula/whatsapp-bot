@@ -1,6 +1,6 @@
 # WhatsApp Bot
 
-Bot de WhatsApp não oficial usando TypeScript com sistema modular de plugins.
+Bot de WhatsApp não oficial usando TypeScript com sistema modular de plugins e gerenciamento de estados.
 
 ## Características
 
@@ -8,6 +8,8 @@ Bot de WhatsApp não oficial usando TypeScript com sistema modular de plugins.
 - Arquitetura modular baseada em plugins
 - Fácil criação de novos comandos
 - Gerenciamento automático de sessão
+- Sistema de estados para fluxos de conversação
+- Mensagens interativas (botões, listas, enquetes e reações)
 
 ## Requisitos
 
@@ -65,6 +67,12 @@ const config: Config = {
         dir: path.join(__dirname, 'plugins'), // Diretório de plugins
         enabled: [],                 // Plugins habilitados (vazio = todos)
         disabled: []                 // Plugins desabilitados
+    },
+    
+    // Configurações do sistema de estados
+    states: {
+        maxAgeHours: 24,            // Tempo máximo para manter estados inativos
+        saveInterval: 5              // Intervalo (em minutos) para salvar estados
     }
 };
 ```
@@ -119,6 +127,105 @@ O bot vem com alguns comandos básicos:
 - `!exemplo` - Comando de exemplo do plugin de demonstração
 - `!eco [mensagem]` - Repete a mensagem enviada
 
+## Sistema de Estados
+
+O bot inclui um sistema de estados que permite criar fluxos de conversação interativos. Com ele, você pode:
+
+- Criar formulários interativos
+- Implementar assistentes conversacionais
+- Desenvolver jogos baseados em texto
+- Criar fluxos de decisão complexos
+
+### Exemplo de Uso do Sistema de Estados
+
+```typescript
+import { Command, CommandParams, StateCommandParams } from '../../types';
+import { BasePlugin } from '../base-plugin';
+
+export default class MeuPluginComEstado extends BasePlugin {
+  constructor() {
+    super('meu-plugin', 'Plugin com estados', '1.0.0');
+  }
+  
+  protected async onInitialize(): Promise<void> {
+    // Comando para iniciar o fluxo
+    this.registerCommand('iniciar', this.iniciarFluxo.bind(this));
+    
+    // Manipuladores de estado
+    this.registerCommand('state:meu-plugin:pergunta1', this.pergunta1Handler.bind(this) as Command);
+    this.registerCommand('state:meu-plugin:pergunta2', this.pergunta2Handler.bind(this) as Command);
+  }
+  
+  private async iniciarFluxo(params: CommandParams): Promise<void> {
+    if ('createState' in params) {
+      const stateParams = params as StateCommandParams;
+      
+      // Criar estado inicial
+      stateParams.createState('pergunta1', { dados: {} });
+      
+      await params.sock.sendMessage(params.sender, {
+        text: 'Fluxo iniciado! Responda a primeira pergunta:'
+      });
+    }
+  }
+  
+  private async pergunta1Handler(params: StateCommandParams): Promise<void> {
+    // Processar resposta e avançar para próximo estado
+    params.updateState('pergunta2', {
+      ...params.state?.data,
+      resposta1: params.messageContent
+    });
+    
+    await params.sock.sendMessage(params.sender, {
+      text: 'Obrigado! Agora responda a segunda pergunta:'
+    });
+  }
+  
+  private async pergunta2Handler(params: StateCommandParams): Promise<void> {
+    // Processar resposta final
+    const dadosCompletos = {
+      ...params.state?.data,
+      resposta2: params.messageContent
+    };
+    
+    // Limpar o estado
+    params.clearState();
+    
+    await params.sock.sendMessage(params.sender, {
+      text: `Fluxo concluído! Suas respostas: ${JSON.stringify(dadosCompletos)}`
+    });
+  }
+}
+```
+
+Para mais detalhes sobre o sistema de estados, consulte a documentação em `src/docs/state-system.md`.
+
+## Mensagens Interativas
+
+O bot inclui um plugin para enviar mensagens interativas no WhatsApp, como:
+
+- **Botões**: Mensagens com botões clicáveis
+- **Listas**: Menus de seleção com categorias e itens
+- **Enquetes**: Votações com múltiplas opções
+- **Reações**: Reações de emoji em mensagens
+
+### Comandos Disponíveis
+
+- `!botoes [texto]` - Envia uma mensagem com botões
+- `!lista [título]` - Envia uma mensagem com lista de opções
+- `!enquete [pergunta]` - Cria uma enquete para votação
+- `!reacao` - Adiciona uma reação a uma mensagem (use respondendo a uma mensagem)
+
+### Exemplo de Uso
+
+```
+!botoes Escolha uma opção para continuar
+!lista Menu principal
+!enquete Qual sua cor favorita?
+```
+
+Para mais detalhes sobre as mensagens interativas, consulte a documentação em `src/docs/interactive-messages.md`.
+
 ## Estrutura do Projeto
 
 ```
@@ -126,6 +233,10 @@ whatsapp-bot/
 ├── src/
 │   ├── commands/       # Comandos básicos
 │   ├── core/           # Núcleo do bot
+│   │   ├── connection.ts     # Gerenciamento de conexão
+│   │   ├── message-handler.ts # Processamento de mensagens
+│   │   └── state-manager.ts  # Gerenciamento de estados
+│   ├── docs/           # Documentação
 │   ├── plugins/        # Sistema de plugins
 │   ├── types/          # Definições de tipos
 │   ├── utils/          # Utilitários

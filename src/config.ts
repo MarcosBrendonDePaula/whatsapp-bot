@@ -1,6 +1,7 @@
 import { Config } from './types';
 import * as path from 'path';
 
+// Atualizar a interface Config no arquivo types/index.ts
 const config: Config = {
     // Configurações gerais do bot
     sessionPath: './.data/session',
@@ -35,6 +36,14 @@ const config: Config = {
         enabled: [],
         // Plugins desabilitados (ignorados durante o carregamento)
         disabled: []
+    },
+    
+    // Configurações do sistema de estados
+    states: {
+        // Tempo máximo (em horas) para manter estados inativos
+        maxAgeHours: 24,
+        // Intervalo (em minutos) para salvar estados automaticamente
+        saveInterval: 5
     }
 };
 

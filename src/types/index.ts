@@ -1,5 +1,60 @@
 import { proto, WASocket } from '@whiskeysockets/baileys';
 
+/**
+ * Interface para o estado de um usuário
+ */
+export interface UserState {
+    /**
+     * Nome do plugin que está gerenciando o estado
+     */
+    pluginName: string;
+    
+    /**
+     * Estado atual do usuário
+     */
+    currentState: string;
+    
+    /**
+     * Data de criação do estado
+     */
+    createdAt: string;
+    
+    /**
+     * Data da última atualização do estado
+     */
+    updatedAt: string;
+    
+    /**
+     * Dados adicionais associados ao estado
+     */
+    data: Record<string, any>;
+}
+
+/**
+ * Parâmetros estendidos para comandos com suporte a estados
+ */
+export interface StateCommandParams extends CommandParams {
+    /**
+     * Estado atual do usuário, se existir
+     */
+    state: UserState | null;
+    
+    /**
+     * Função para criar um novo estado
+     */
+    createState: (initialState: string, data?: Record<string, any>) => void;
+    
+    /**
+     * Função para atualizar o estado atual
+     */
+    updateState: (newState: string, data?: Record<string, any>) => boolean;
+    
+    /**
+     * Função para limpar o estado
+     */
+    clearState: () => boolean;
+}
+
 export interface CommandParams {
     sock: WASocket;
     msg: proto.IWebMessageInfo;
@@ -10,7 +65,7 @@ export interface CommandParams {
 }
 
 export interface Command {
-    (params: CommandParams): Promise<void>;
+    (params: CommandParams | StateCommandParams): Promise<void>;
 }
 
 export interface Commands {
@@ -34,6 +89,18 @@ export interface PluginsConfig {
     disabled: string[];
 }
 
+export interface StateConfig {
+    /**
+     * Tempo máximo (em horas) para manter estados inativos
+     */
+    maxAgeHours: number;
+    
+    /**
+     * Intervalo (em minutos) para salvar estados automaticamente
+     */
+    saveInterval: number;
+}
+
 export interface Config {
     sessionPath: string;
     prefix: string;
@@ -41,4 +108,9 @@ export interface Config {
     botName: string;
     logging: LoggingConfig;
     plugins: PluginsConfig;
+    
+    /**
+     * Configurações do sistema de estados
+     */
+    states?: StateConfig;
 }

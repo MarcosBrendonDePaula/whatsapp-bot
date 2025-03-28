@@ -1,4 +1,4 @@
-import { Connection, MessageHandler } from './core';
+import { Connection, MessageHandler, StateManager } from './core';
 import commands from './commands';
 import config from './config';
 import logger from './utils/logger';
@@ -10,12 +10,14 @@ import pluginManager from './plugins/plugin-manager';
 process.on('SIGINT', async () => {
     logger.info('Recebido sinal de encerramento, desligando...');
     await pluginManager.shutdownPlugins();
+    await StateManager.onShutdown();
     process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
     logger.info('Recebido sinal de encerramento, desligando...');
     await pluginManager.shutdownPlugins();
+    await StateManager.onShutdown();
     process.exit(0);
 });
 

@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import pluginManager from '../plugins/plugin-manager';
+import { StateManager } from '../core';
 
 // Armazenar estatísticas do bot
 const botStats = {
@@ -72,12 +73,16 @@ const status: Command = async ({ sock, sender }: CommandParams) => {
     // Obter número de plugins carregados
     const pluginsCount = pluginManager.getAllPlugins().length;
     
+    // Obter número de estados ativos
+    const activeStates = StateManager.getUsersInState('').length;
+    
     const statusMessage = `📊 *Status do Bot*\n\n` +
         `⏱️ *Tempo online:* ${uptime}\n` +
         `📨 *Mensagens processadas:* ${botStats.messagesProcessed}\n` +
         `🔧 *Comandos executados:* ${botStats.commandsExecuted}\n` +
         `❌ *Erros:* ${botStats.errors}\n\n` +
         `🧩 *Plugins carregados:* ${pluginsCount}\n` +
+        `📝 *Estados ativos:* ${activeStates}\n` +
         `💾 *Uso de memória:* ${memoryUsageMB} MB\n` +
         `🖥️ *CPU:* ${cpuUsage}%\n` +
         `💻 *Memória do sistema:* ${freeMemory}GB livre de ${totalMemory}GB\n` +
@@ -194,7 +199,8 @@ const ajudaAdmin: Command = async ({ sock, sender }: CommandParams) => {
         `• *!plugins* - Lista plugins carregados\n` +
         `• *!logs [n]* - Mostra as últimas n linhas de log (padrão: 10)\n` +
         `• *!reiniciar* - Reinicia o bot\n` +
-        `• *!limparsessao* - Limpa a sessão e força nova autenticação\n`;
+        `• *!limparsessao* - Limpa a sessão e força nova autenticação\n` +
+        `• *!estados* - Gerencia estados de usuários\n`;
     
     await sock.sendMessage(sender, {
         text: message
@@ -227,11 +233,157 @@ function getUptime(): string {
     return uptime;
 }
 
+/**
+ * Comando para gerenciar estados
+ */
+const estados: Command = async ({ sock, sender, args }: CommandParams) => {
+    // Verificar se o comando veio do dono do bot
+    if (!isOwner(sender)) {
+        await sock.sendMessage(sender, {
+            text: '❌ Apenas o dono do bot pode usar este comando.'
+        });
+        return;
+    }
+    
+    // Se não houver argumentos, mostrar ajuda
+    if (args.length === 0) {
+        await sock.sendMessage(sender, {
+            text: `🔄 *Gerenciamento de Estados*\n\n` +
+                `Comandos disponíveis:\n` +
+                `• *!estados listar* - Lista todos os estados ativos\n` +
+                `• *!estados limpar [userId]* - Limpa o estado de um usuário específico\n` +
+                `• *!estados limpartodos* - Limpa todos os estados\n` +
+                `• *!estados salvar* - Força o salvamento dos estados\n` +
+                `• *!estados info [userId]* - Mostra informações detalhadas de um estado`
+        });
+        return;
+    }
+    
+    const subCommand = args[0].toLowerCase();
+    
+    switch (subCommand) {
+        case 'listar': {
+            // Obter todos os estados
+            const states = StateManager.getUsersInState('');
+            
+            if (states.length === 0) {
+                await sock.sendMessage(sender, {
+                    text: '📝 Não há estados ativos no momento.'
+                });
+                return;
+            }
+            
+            let message = `📝 *Estados Ativos (${states.length})*\n\n`;
+            
+            for (const userId of states) {
+                const state = StateManager.getState(userId);
+                if (state) {
+                    const shortUserId = userId.split('@')[0];
+                    message += `• *${shortUserId}*: ${state.pluginName} (${state.currentState})\n`;
+                }
+            }
+            
+            await sock.sendMessage(sender, {
+                text: message
+            });
+            break;
+        }
+        
+        case 'limpar': {
+            if (args.length < 2) {
+                await sock.sendMessage(sender, {
+                    text: '❌ Especifique o ID do usuário para limpar o estado.'
+                });
+                return;
+            }
+            
+            const userId = args[1].includes('@') ? args[1] : `${args[1]}@s.whatsapp.net`;
+            const cleared = StateManager.clearState(userId);
+            
+            if (cleared) {
+                await sock.sendMessage(sender, {
+                    text: `✅ Estado do usuário ${args[1]} foi limpo com sucesso.`
+                });
+            } else {
+                await sock.sendMessage(sender, {
+                    text: `❌ Usuário ${args[1]} não possui estado ativo.`
+                });
+            }
+            break;
+        }
+        
+        case 'limpartodos': {
+            const states = StateManager.getUsersInState('');
+            let count = 0;
+            
+            for (const userId of states) {
+                const cleared = StateManager.clearState(userId);
+                if (cleared) count++;
+            }
+            
+            await sock.sendMessage(sender, {
+                text: `✅ ${count} estados foram limpos.`
+            });
+            break;
+        }
+        
+        case 'salvar': {
+            StateManager.saveStates();
+            await sock.sendMessage(sender, {
+                text: '✅ Estados salvos com sucesso.'
+            });
+            break;
+        }
+        
+        case 'info': {
+            if (args.length < 2) {
+                await sock.sendMessage(sender, {
+                    text: '❌ Especifique o ID do usuário para ver informações do estado.'
+                });
+                return;
+            }
+            
+            const userId = args[1].includes('@') ? args[1] : `${args[1]}@s.whatsapp.net`;
+            const state = StateManager.getState(userId);
+            
+            if (!state) {
+                await sock.sendMessage(sender, {
+                    text: `❌ Usuário ${args[1]} não possui estado ativo.`
+                });
+                return;
+            }
+            
+            const createdDate = new Date(state.createdAt);
+            const updatedDate = new Date(state.updatedAt);
+            
+            let message = `📝 *Informações do Estado*\n\n` +
+                `• *Usuário:* ${args[1]}\n` +
+                `• *Plugin:* ${state.pluginName}\n` +
+                `• *Estado:* ${state.currentState}\n` +
+                `• *Criado em:* ${createdDate.toLocaleString()}\n` +
+                `• *Atualizado em:* ${updatedDate.toLocaleString()}\n\n` +
+                `• *Dados:*\n${JSON.stringify(state.data, null, 2)}`;
+            
+            await sock.sendMessage(sender, {
+                text: message
+            });
+            break;
+        }
+        
+        default:
+            await sock.sendMessage(sender, {
+                text: `❌ Subcomando desconhecido: ${subCommand}\n` +
+                    `Use !estados para ver os comandos disponíveis.`
+            });
+    }
+};
+
 // Exportar comandos
 export default {
     'reiniciar': reiniciar,
     'status': status,
     'plugins': plugins,
     'logs': logs,
-    'ajudaadmin': ajudaAdmin
+    'ajudaadmin': ajudaAdmin,
+    'estados': estados
 };

@@ -65,6 +65,24 @@ const basicCommands: Commands = {
             message += `*Plugins:*\n`;
             message += `Há ${plugins.length} plugin(s) carregado(s).\n`;
             message += `Use ${config.prefix}plugins para ver detalhes.\n\n`;
+            
+            // Adicionar informações sobre o plugin de formulário
+            const formPlugin = plugins.find(p => p.name === 'form');
+            if (formPlugin) {
+                message += `*Plugin de Formulário:*\n`;
+                message += `${config.prefix}form - Iniciar um formulário interativo\n`;
+                message += `Este plugin demonstra o sistema de estados do bot.\n\n`;
+            }
+            
+            // Adicionar informações sobre o plugin de mensagens interativas
+            const interactivePlugin = plugins.find(p => p.name === 'interactive');
+            if (interactivePlugin) {
+                message += `*Plugin de Mensagens Interativas:*\n`;
+                message += `${config.prefix}botoes [texto] - Enviar mensagem com botões\n`;
+                message += `${config.prefix}lista [título] - Enviar mensagem com lista\n`;
+                message += `${config.prefix}enquete [pergunta] - Criar uma enquete\n`;
+                message += `${config.prefix}reacao - Adicionar reação a uma mensagem\n\n`;
+            }
         }
         
         message += `Desenvolvido por Marcos`;
