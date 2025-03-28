@@ -20,13 +20,30 @@ export default class InteractivePlugin extends BasePlugin {
      * Método chamado quando o plugin é inicializado
      */
     protected async onInitialize(): Promise<void> {
-        // Registrar comandos
-        this.registerCommand('botoes', this.buttonCommand.bind(this));
-        this.registerCommand('lista', this.listCommand.bind(this));
-        this.registerCommand('enquete', this.pollCommand.bind(this));
-        this.registerCommand('reacao', this.reactionCommand.bind(this));
+        logger.info('Inicializando plugin de mensagens interativas...');
         
-        logger.info('Plugin de mensagens interativas inicializado com sucesso');
+        try {
+            // Registrar comandos
+            logger.debug('Registrando comando: botoes');
+            this.registerCommand('botoes', this.buttonCommand.bind(this));
+            
+            logger.debug('Registrando comando: lista');
+            this.registerCommand('lista', this.listCommand.bind(this));
+            
+            logger.debug('Registrando comando: enquete');
+            this.registerCommand('enquete', this.pollCommand.bind(this));
+            
+            logger.debug('Registrando comando: reacao');
+            this.registerCommand('reacao', this.reactionCommand.bind(this));
+            
+            // Verificar se os comandos foram registrados
+            const commands = this.getCommands();
+            logger.debug(`Comandos registrados: ${Object.keys(commands).join(', ')}`);
+            
+            logger.info('Plugin de mensagens interativas inicializado com sucesso');
+        } catch (error) {
+            logger.error(`Erro ao inicializar plugin de mensagens interativas: ${(error as Error).message}`, error as Error);
+        }
     }
     
     /**

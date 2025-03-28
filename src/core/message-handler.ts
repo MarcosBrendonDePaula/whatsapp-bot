@@ -9,13 +9,20 @@ class MessageHandler {
     private commands: Map<string, Command> = new Map();
 
     public registerCommand(name: string, handler: Command): void {
+        logger.debug(`Registrando comando: ${name}`);
         this.commands.set(name, handler);
     }
 
     public registerCommands(commandsObject: Commands): void {
+        logger.debug(`Registrando ${Object.keys(commandsObject).length} comandos`);
         Object.entries(commandsObject).forEach(([name, handler]) => {
             this.registerCommand(name, handler);
         });
+        
+        // Listar todos os comandos registrados
+        const allCommands = Array.from(this.commands.keys());
+        logger.debug(`Total de comandos registrados: ${allCommands.length}`);
+        logger.debug(`Comandos disponíveis: ${allCommands.join(', ')}`);
     }
 
     public async handleMessage(m: { messages: proto.IWebMessageInfo[] }, sock: WASocket): Promise<void> {
@@ -159,7 +166,11 @@ class MessageHandler {
                 const [cmdName, ...args] = messageContent.slice(config.prefix.length).trim().split(' ');
                 const commandName = cmdName.toLowerCase();
 
+                logger.debug(`Procurando comando: ${commandName}`);
+                logger.debug(`Comandos disponíveis: ${Array.from(this.commands.keys()).join(', ')}`);
+                
                 if (this.commands.has(commandName)) {
+                    logger.debug(`Comando ${commandName} encontrado`);
                     try {
                         const handler = this.commands.get(commandName)!;
                         logger.debug(`Executando comando: ${commandName} com argumentos: ${args.join(' ')}`);

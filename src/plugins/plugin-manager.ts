@@ -19,6 +19,8 @@ class PluginManager {
    */
   public async loadPlugins(pluginsDir: string): Promise<void> {
     try {
+      logger.info(`Carregando plugins do diretório: ${pluginsDir}`);
+      
       // Verificar se o diretório existe
       if (!fs.existsSync(pluginsDir)) {
         logger.warn(`Diretório de plugins não encontrado: ${pluginsDir}`);
@@ -27,10 +29,12 @@ class PluginManager {
       
       // Obter todos os arquivos e diretórios no diretório de plugins
       const items = fs.readdirSync(pluginsDir);
+      logger.debug(`Encontrados ${items.length} itens no diretório de plugins`);
       
       for (const item of items) {
         // Ignorar arquivos base e utilitários
         if (item === 'base-plugin.ts' || item === 'plugin-manager.ts') {
+          logger.debug(`Ignorando arquivo utilitário: ${item}`);
           continue;
         }
         
@@ -42,16 +46,31 @@ class PluginManager {
           const indexPath = path.join(itemPath, 'index.ts');
           const indexJsPath = path.join(itemPath, 'index.js');
           
-          if (fs.existsSync(indexPath) || fs.existsSync(indexJsPath)) {
+          logger.debug(`Verificando plugin em diretório: ${item}`);
+          
+          if (fs.existsSync(indexPath)) {
+            logger.debug(`Encontrado arquivo index.ts em ${item}`);
             await this.loadPlugin(itemPath);
+          } else if (fs.existsSync(indexJsPath)) {
+            logger.debug(`Encontrado arquivo index.js em ${item}`);
+            await this.loadPlugin(itemPath);
+          } else {
+            logger.debug(`Nenhum arquivo index encontrado em ${item}`);
           }
         } else if (stat.isFile() && (item.endsWith('.ts') || item.endsWith('.js'))) {
           // Se for um arquivo .ts ou .js, carregar como plugin
+          logger.debug(`Verificando plugin em arquivo: ${item}`);
           await this.loadPlugin(itemPath);
         }
       }
       
       logger.info(`${this.plugins.size} plugins carregados`);
+      
+      // Listar plugins carregados
+      if (this.plugins.size > 0) {
+        const pluginNames = Array.from(this.plugins.keys()).join(', ');
+        logger.info(`Plugins carregados: ${pluginNames}`);
+      }
     } catch (error) {
       logger.error(`Erro ao carregar plugins: ${(error as Error).message}`, error as Error);
     }
@@ -63,7 +82,10 @@ class PluginManager {
    */
   private async loadPlugin(pluginPath: string): Promise<void> {
     try {
+      logger.debug(`Tentando carregar plugin de: ${pluginPath}`);
+      
       // Importar o plugin
+      logger.debug(`Importando módulo: ${pluginPath}`);
       const pluginModule = await import(pluginPath);
       
       // Verificar se o módulo exporta um plugin
@@ -72,12 +94,24 @@ class PluginManager {
         return;
       }
       
+      logger.debug(`Módulo importado com sucesso, criando instância do plugin`);
+      
       // Criar instância do plugin
       const plugin: Plugin = new pluginModule.default();
       
       // Verificar se é um plugin válido
-      if (!plugin.name || !plugin.initialize || !plugin.getCommands) {
-        logger.warn(`Módulo em ${pluginPath} não é um plugin válido`);
+      if (!plugin.name) {
+        logger.warn(`Módulo em ${pluginPath} não tem nome de plugin válido`);
+        return;
+      }
+      
+      if (!plugin.initialize) {
+        logger.warn(`Módulo em ${pluginPath} não tem método initialize`);
+        return;
+      }
+      
+      if (!plugin.getCommands) {
+        logger.warn(`Módulo em ${pluginPath} não tem método getCommands`);
         return;
       }
       
@@ -86,6 +120,7 @@ class PluginManager {
       logger.info(`Plugin carregado: ${plugin.name} v${plugin.version}`);
     } catch (error) {
       logger.error(`Erro ao carregar plugin ${pluginPath}: ${(error as Error).message}`, error as Error);
+      logger.debug(`Stack trace: ${(error as Error).stack}`);
     }
   }
   
@@ -113,9 +148,28 @@ class PluginManager {
   public getAllCommands(): Commands {
     const allCommands: Commands = {};
     
+    logger.debug('Obtendo comandos de todos os plugins');
+    
     for (const plugin of this.plugins.values()) {
+      logger.debug(`Obtendo comandos do plugin: ${plugin.name}`);
       const commands = plugin.getCommands();
+      
+      // Listar comandos do plugin
+      const commandNames = Object.keys(commands);
+      if (commandNames.length > 0) {
+        logger.debug(`Plugin ${plugin.name} fornece os comandos: ${commandNames.join(', ')}`);
+      } else {
+        logger.debug(`Plugin ${plugin.name} não fornece comandos`);
+      }
+      
       Object.assign(allCommands, commands);
+    }
+    
+    // Listar todos os comandos coletados
+    const allCommandNames = Object.keys(allCommands);
+    logger.debug(`Total de comandos coletados: ${allCommandNames.length}`);
+    if (allCommandNames.length > 0) {
+      logger.debug(`Comandos disponíveis: ${allCommandNames.join(', ')}`);
     }
     
     return allCommands;

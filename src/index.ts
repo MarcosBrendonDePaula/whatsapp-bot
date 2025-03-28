@@ -45,24 +45,36 @@ async function startBot(): Promise<void> {
         logger.info('Comandos básicos registrados');
 
         // Carregar e inicializar plugins
+        logger.info('Carregando plugins...');
         await pluginManager.loadPlugins(config.plugins.dir);
         
         // Inicializar a conexão
+        logger.info('Inicializando conexão...');
         const connection = new Connection();
 
         // Configurar o manipulador de mensagens
+        logger.info('Configurando manipulador de mensagens...');
         connection.setMessageHandler(messageHandler);
 
         // Iniciar o bot
+        logger.info('Inicializando bot...');
         const sock = await connection.initialize();
         
         // Inicializar plugins com a conexão
+        logger.info('Inicializando plugins com a conexão...');
         await pluginManager.initializePlugins(sock);
         
         // Registrar comandos dos plugins
+        logger.info('Registrando comandos dos plugins...');
         const pluginCommands = pluginManager.getAllCommands();
+        
+        // Listar comandos que serão registrados
+        const commandNames = Object.keys(pluginCommands);
+        logger.info(`Registrando ${commandNames.length} comandos de plugins: ${commandNames.join(', ')}`);
+        
+        // Registrar os comandos
         messageHandler.registerCommands(pluginCommands);
-        logger.info(`${Object.keys(pluginCommands).length} comandos de plugins registrados`);
+        logger.info(`${commandNames.length} comandos de plugins registrados com sucesso`);
 
         logger.info('Bot inicializado com sucesso!');
     } catch (error) {

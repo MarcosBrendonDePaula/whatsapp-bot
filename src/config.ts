@@ -14,7 +14,7 @@ const config: Config = {
         // Diretório onde os logs serão armazenados
         dir: './logs',
         // Nível de log (error, warn, info, debug, trace)
-        level: 'info',
+        level: 'debug',
         // Configurações de rotação de logs
         rotation: {
             // Tamanho máximo do arquivo de log antes de rotacionar
@@ -44,6 +44,14 @@ const config: Config = {
         maxAgeHours: 24,
         // Intervalo (em minutos) para salvar estados automaticamente
         saveInterval: 5
+    },
+    
+    // Configurações de sincronização de histórico
+    historySync: {
+        // Se deve sincronizar o histórico de mensagens
+        enabled: true,
+        // Diretório para armazenar o histórico (opcional, se não fornecido, não será salvo em disco)
+        storageDir: './.data/history'
     }
 };
 

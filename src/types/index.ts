@@ -101,6 +101,21 @@ export interface StateConfig {
     saveInterval: number;
 }
 
+/**
+ * Configurações de sincronização de histórico
+ */
+export interface HistorySyncConfig {
+    /**
+     * Se deve sincronizar o histórico de mensagens
+     */
+    enabled: boolean;
+    
+    /**
+     * Diretório para armazenar o histórico (opcional)
+     */
+    storageDir?: string;
+}
+
 export interface Config {
     sessionPath: string;
     prefix: string;
@@ -113,4 +128,9 @@ export interface Config {
      * Configurações do sistema de estados
      */
     states?: StateConfig;
+    
+    /**
+     * Configurações de sincronização de histórico
+     */
+    historySync?: HistorySyncConfig;
 }

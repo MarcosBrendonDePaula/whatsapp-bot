@@ -14,6 +14,7 @@ import config from '../config';
 import logger from '../utils/logger';
 import messageQueue from '../utils/message-queue';
 import MessageHandler from './message-handler';
+import historyStorage from '../utils/history-storage';
 
 // Definir a interface do logger localmente com base no que é esperado pelo Baileys
 interface Logger {
@@ -88,8 +89,8 @@ class Connection {
                 level: 'info'
             };
             
-            // Criar conexão
-            this.sock = makeWASocket({
+            // Configurações do socket
+            const socketConfig: any = {
                 version,
                 auth: {
                     creds: state.creds,
@@ -98,7 +99,29 @@ class Connection {
                 printQRInTerminal: true,
                 // Forçar exibição do QR code se não houver credenciais válidas
                 browser: ['Ubuntu', 'Chrome', '22.04.4']
-            });
+            };
+            
+            // Configurar sincronização de histórico
+            if (config.historySync?.enabled) {
+                logger.info('Sincronização de histórico habilitada');
+                socketConfig.getMessage = async (key: any) => {
+                    // Usar o historyStorage para buscar mensagens
+                    const message = historyStorage.getMessage(key);
+                    if (message) {
+                        return message;
+                    }
+                    
+                    // Se não encontrar a mensagem, retornar uma mensagem padrão
+                    logger.debug(`Mensagem não encontrada: ${JSON.stringify(key)}`);
+                    return { conversation: 'Mensagem não disponível' };
+                };
+            } else {
+                logger.info('Sincronização de histórico desabilitada');
+                socketConfig.shouldSyncHistoryMessage = () => false;
+            }
+            
+            // Criar conexão
+            this.sock = makeWASocket(socketConfig);
             
             // Verificar se há credenciais válidas
             if (!state.creds.me) {
@@ -191,6 +214,41 @@ class Connection {
                 await this.messageHandler.handleMessage(m, this.sock!);
             } else {
                 logger.warn('Message handler não configurado');
+            }
+        });
+        
+        // Configurar handler para sincronização de histórico
+        this.sock.ev.on('messaging-history.set', (data) => {
+            const { chats, contacts, messages, syncType } = data;
+            
+            logger.info(`Recebido histórico de mensagens (tipo: ${syncType})`);
+            logger.debug(`Chats: ${chats.length}, Contatos: ${Object.keys(contacts).length}, Mensagens: ${messages.length}`);
+            
+            // Salvar os dados no armazenamento de histórico
+            if (config.historySync?.enabled) {
+                historyStorage.saveHistory({
+                    ...data,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            
+            // Exemplo de como processar os chats
+            chats.forEach(chat => {
+                logger.debug(`Chat: ${chat.id}, Nome: ${chat.name}`);
+            });
+            
+            // Exemplo de como processar os contatos
+            Object.entries(contacts).forEach(([id, contact]) => {
+                logger.debug(`Contato: ${id}, Nome: ${contact.name || 'Sem nome'}`);
+            });
+            
+            // Exemplo de como processar as mensagens (limitado a 5 para não sobrecarregar os logs)
+            messages.slice(0, 5).forEach(message => {
+                logger.debug(`Mensagem: ${message.key.id}, De: ${message.key.remoteJid}`);
+            });
+            
+            if (messages.length > 5) {
+                logger.debug(`... e mais ${messages.length - 5} mensagens`);
             }
         });
     }
