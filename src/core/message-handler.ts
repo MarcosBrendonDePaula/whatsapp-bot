@@ -4,6 +4,7 @@ import logger from '../utils/logger';
 import { Command, Commands, CommandParams, StateCommandParams } from '../types';
 import { incrementMessageCount, incrementErrorCount } from '../commands/admin';
 import stateManager from './state-manager';
+import pluginManager from '../plugins/plugin-manager';
 
 class MessageHandler {
     private commands: Map<string, Command> = new Map();
@@ -246,6 +247,28 @@ class MessageHandler {
                         logger.error(`Não foi possível enviar mensagem de comando desconhecido: ${(notifyError as Error).message}`);
                     }
                 }
+                
+                // Não processar mensagens de comando com o assistente de IA
+                return;
+            }
+            
+            // Processar mensagem com o assistente de IA, se disponível
+            try {
+                // Obter o plugin de IA
+                const aiPlugin = pluginManager.getPlugin('ai-assistant');
+                
+                // Verificar se o plugin existe e tem o método processMessage
+                if (aiPlugin && typeof (aiPlugin as any).processMessage === 'function') {
+                    // Processar a mensagem com o assistente de IA
+                    const processed = await (aiPlugin as any).processMessage(msg, sock);
+                    
+                    if (processed) {
+                        logger.debug(`Mensagem processada pelo assistente de IA`);
+                        return;
+                    }
+                }
+            } catch (aiError) {
+                logger.error(`Erro ao processar mensagem com assistente de IA: ${(aiError as Error).message}`, aiError as Error);
             }
         } catch (error) {
             logger.error(`Erro ao processar mensagem: ${(error as Error).message}`, error as Error);
